@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { chromium, Browser, Page } from 'playwright-chromium'
 import { logger } from 'hono/logger'
+import { cors } from 'hono/cors'
 import { config } from 'dotenv'
 
 // Load environment variables
@@ -9,13 +10,20 @@ config()
 
 const app = new Hono()
 
-// Middleware: Logger
-app.use('*', logger())
-
 // Environment Variables
 const API_KEY = process.env.API_KEY || 'shoot-default-key'
 const MAX_CONCURRENCY = Number(process.env.MAX_CONCURRENCY) || 5
 const PORT = Number(process.env.PORT) || 3000
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*'
+
+// Middleware: Logger & CORS
+app.use('*', logger())
+app.use('*', cors({
+  origin: ALLOWED_ORIGINS,
+  allowMethods: ['GET', 'POST', 'HEAD', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'x-api-key'],
+  maxAge: 600,
+}))
 
 // State: Browser Singleton & Concurrency Counter
 let browserInstance: Browser | null = null
