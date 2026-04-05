@@ -10,6 +10,7 @@
 
 - 🖼️ **Multi-Format Output**: Generate PNG, JPEG, WEBP images or high-quality PDF documents.
 - 🚀 **Performance Optimized**: Uses a **Browser Singleton** (warm browser) pattern for near-instant response times.
+- 🌐 **Metadata Extraction**: Get website title, description, cover image, and icon with a hybrid Fast-Path/Render-Path engine.
 - 📄 **Raw HTML Support**: Render screenshots/PDFs directly from HTML strings via POST requests.
 - 🔐 **Secure by Default**: Built-in API Key authentication middleware.
 - 🚦 **Concurrency Control**: Intelligent request queueing and limits to prevent server OOM (Out of Memory).
@@ -69,6 +70,30 @@ Returns the current status, uptime, and active request count.
 | `delay` | number | `0` | Wait time in ms before capture. |
 | `paper` | string | `A4` | PDF paper format (A4, Letter, etc.). |
 
+### Extract Website Metadata
+`GET /metadata` or `POST /metadata`
+
+Extracts standard and social metadata from any URL. It uses a **Hybrid Extraction Engine**:
+1. **Fast Path**: Attempts to fetch tags directly using a Googlebot User-Agent.
+2. **Render Path**: Fallbacks to a headless browser for SPAs or if explicitly requested.
+
+#### Parameters
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `url` | string | - | The URL to extract metadata from. |
+| `render` | boolean | `false` | Force browser rendering (slower, but better for pure SPAs). |
+
+#### Example Response
+```json
+{
+  "title": "Evetry - Connect and Shoot",
+  "description": "The ultimate platform for creators.",
+  "image": "https://evetry.com/og-image.jpg",
+  "icon": "https://evetry.com/favicon.ico",
+  "url": "https://evetry.com"
+}
+```
+
 ### Security & CORS
 You can restrict which domains can access this API by setting the `ALLOWED_ORIGINS` environment variable in your `.env` file.
 - **Multiple Domains**: `ALLOWED_ORIGINS=https://domain1.com,https://domain2.com`
@@ -91,6 +116,7 @@ curl -X POST http://localhost:3000/screenshot \
 
 Check out the [examples/](./examples/) directory for more scripts:
 - **[Capture PDF from Raw HTML](./examples/html-to-pdf.js)**: Demonstrates how to pass a custom HTML string and get a PDF back.
+- **[Extract Website Metadata](./examples/metadata.js)**: Shows how to get SEO and OG metadata from any URL.
 - **[Capture Full-Page Screenshot](./examples/screenshot-fullpage.js)**: Shows advanced options like high-quality JPEG and a custom rendering delay.
 - **[Simple GET Capture](./examples/simple-get.js)**: Using query parameters for a quick screenshot.
 
