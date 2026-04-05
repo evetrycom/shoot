@@ -91,7 +91,22 @@ Check out the [examples/](./examples/) directory for more scripts:
 
 ## 🐳 Docker Deployment
 
-Build and run the container:
+### Use Pre-built Image (Recommended)
+You can pull the latest image directly from GitHub Container Registry (GHCR):
+```bash
+docker pull ghcr.io/evetrycom/shoot:latest
+```
+
+Then run it:
+```bash
+docker run -p 3000:3000 \
+  --env API_KEY=yoursecret \
+  --env MAX_CONCURRENCY=5 \
+  ghcr.io/evetrycom/shoot:latest
+```
+
+### Build Locally
+If you want to build the container locally:
 ```bash
 docker build -t shoot .
 docker run -p 3000:3000 --env API_KEY=yoursecret shoot
