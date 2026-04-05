@@ -69,6 +69,11 @@ Returns the current status, uptime, and active request count.
 | `delay` | number | `0` | Wait time in ms before capture. |
 | `paper` | string | `A4` | PDF paper format (A4, Letter, etc.). |
 
+### Security & CORS
+You can restrict which domains can access this API by setting the `ALLOWED_ORIGINS` environment variable in your `.env` file.
+- **Multiple Domains**: `ALLOWED_ORIGINS=https://domain1.com,https://domain2.com`
+- **All Domains**: `ALLOWED_ORIGINS=*` (or leave empty)
+
 #### Example (CURL)
 ```bash
 curl -X POST http://localhost:3000/screenshot \
