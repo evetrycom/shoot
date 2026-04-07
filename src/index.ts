@@ -1,15 +1,10 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
-import { chromium } from 'playwright-extra'
-import stealth from 'puppeteer-extra-plugin-stealth'
-import type { Browser, Page } from 'playwright-chromium'
+import { chromium, Browser, Page } from 'playwright-chromium'
 import { logger } from 'hono/logger'
 import { cors } from 'hono/cors'
 import { config } from 'dotenv'
 import * as cheerio from 'cheerio'
-
-// Initialize Playwright Extra with Stealth
-chromium.use(stealth())
 
 // Load environment variables
 config()
@@ -34,16 +29,6 @@ app.use('*', cors({
 // State: Browser Singleton & Concurrency Counter
 let browserInstance: Browser | null = null
 let activePages = 0
-
-// Common User-Agents for rotation
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edge/122.0.2365.92'
-]
-
-const getRandomUA = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
 
 // Middleware: API Key Authentication
 app.use('/:path{(screenshot|metadata)}', async (c, next) => {
@@ -77,13 +62,9 @@ async function getBrowser(): Promise<Browser> {
     await browserInstance.close().catch(() => {})
   }
 
-  console.log('[Browser] Launching new instance with stealth...')
+  console.log('[Browser] Launching new instance...')
   browserInstance = await chromium.launch({
-    args: [
-      '--no-sandbox', 
-      '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled'
-    ]
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   })
   
   return browserInstance
@@ -132,10 +113,7 @@ const screenshotHandler = async (c: any) => {
       viewport: { 
         width: options.width || 1280, 
         height: options.height || 720 
-      },
-      userAgent: getRandomUA(),
-      // Force light mode to avoid dark mode screenshots unless requested (can be customized)
-      colorScheme: 'light'
+      }
     })
     page = await context.newPage()
     
@@ -270,14 +248,11 @@ const metadataHandler = async (c: any) => {
           metadata.icon = resolveFullUrl(metadata.icon)
           metadata.image = resolveFullUrl(metadata.image)
 
-          // If results are "too empty", we might want to fallback to rendering
+          // If results are "too empty", we might want to fallback to rendering (only if not explicit)
           if (!metadata.title && !metadata.description) {
-            console.log('[Fast Path] Results too sparse (title/desc missing), falling back to rendering...')
+            console.log('[Fast Path] Results too sparse, falling back to rendering...')
             metadata = null
           }
-        } else {
-          console.log(`[Fast Path] Response failed with status ${response.status}, falling back to rendering...`)
-          metadata = null
         }
       } catch (e) {
         console.warn(`[Fast Path] Failed: ${e instanceof Error ? e.message : String(e)}`)
@@ -290,22 +265,14 @@ const metadataHandler = async (c: any) => {
       let page: Page | null = null
       try {
         const browser = await getBrowser()
-        const context = await browser.newContext({ 
-          userAgent: getRandomUA(),
-          viewport: { width: 1280, height: 720 } 
-        })
+        const context = await browser.newContext()
         page = await context.newPage()
         
-        console.log(`[Render Path] Navigating to ${url}...`)
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 })
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
         
-        // Wait a bit for dynamic content to settle
-        await page.waitForTimeout(1000)
-        
+        // Pass a string for the evaluation function to prevent esbuild/tsx from adding __name or other artifacts
         const script = `({ originalUrl }) => {
           const data = {};
-          
-          // 1. Extract from Meta tags
           const metas = document.getElementsByTagName('meta');
           for (let i = 0; i < metas.length; i++) {
             const p = metas[i].getAttribute('property') || metas[i].getAttribute('name');
@@ -313,23 +280,9 @@ const metadataHandler = async (c: any) => {
             if (p && c) data[p] = c;
           }
           
-          // 2. Extract from JSON-LD
-          let jsonLd = {};
-          try {
-            const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-            scripts.forEach(s => {
-              try {
-                const parsed = JSON.parse(s.innerText);
-                if (parsed['@type'] === 'WebPage' || parsed['@type'] === 'Article') {
-                  jsonLd = { ...jsonLd, ...parsed };
-                }
-              } catch(e) {}
-            });
-          } catch(e) {}
-          
-          const title = data['og:title'] || data['twitter:title'] || jsonLd.headline || jsonLd.name || document.title || null;
-          const description = data['og:description'] || data['twitter:description'] || data['description'] || jsonLd.description || null;
-          let image = data['og:image'] || data['twitter:image'] || (jsonLd.image && (jsonLd.image.url || jsonLd.image)) || null;
+          const title = data['og:title'] || data['twitter:title'] || data['title'] || document.title || null;
+          const description = data['og:description'] || data['twitter:description'] || data['description'] || null;
+          let image = data['og:image'] || data['twitter:image'] || data['image_src'] || data['image'] || null;
           
           if (!image) {
             const img = document.querySelector('body img');
@@ -340,7 +293,7 @@ const metadataHandler = async (c: any) => {
           let icon = iconEl ? iconEl.getAttribute('href') : '/favicon.ico';
 
           const resolveUrl = (v) => {
-            if (!v || typeof v !== 'string') return null;
+            if (!v) return null;
             try { return new URL(v, originalUrl).href; } catch(e) { return v; }
           };
 
@@ -349,8 +302,7 @@ const metadataHandler = async (c: any) => {
             description,
             image: resolveUrl(image),
             icon: resolveUrl(icon),
-            url: data['og:url'] || originalUrl,
-            source: 'playwright-rendered'
+            url: data['og:url'] || originalUrl
           };
         }`;
 
